@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Line } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from "chart.js";
-
 import Input from "./components/ui/input";
 import Button from "./components/ui/button";
 
@@ -25,15 +24,13 @@ function App() {
 
   // 🔄 Auto-fetch stock data every 10 seconds
   useEffect(() => {
-    fetchStockData(); // Initial fetch when component mounts
-    const interval = setInterval(() => {
-      fetchStockData();
-    }, 10000); // Fetch data every 10 sec
+    fetchStockData();
+    const interval = setInterval(fetchStockData, 10000);
+    return () => clearInterval(interval);
+  }, [ticker]);
 
-    return () => clearInterval(interval); // Cleanup on component unmount
-  }, [ticker]); // Re-run effect when ticker changes
-
-  const chartData = stockData
+  // 🟢 Convert stock data to Chart.js format (Prevent crash on undefined)
+  const chartData = stockData?.["Time Series (5min)"]
     ? {
         labels: Object.keys(stockData["Time Series (5min)"]).reverse(),
         datasets: [
@@ -47,6 +44,20 @@ function App() {
         ],
       }
     : null;
+
+  // 📊 Chart.js Options for Better Formatting
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        ticks: { autoSkip: true, maxTicksLimit: 10 },
+      },
+      y: {
+        beginAtZero: false,
+      },
+    },
+  };
 
   return (
     <div className="flex flex-col items-center p-6">
@@ -66,9 +77,13 @@ function App() {
 
       {stockData ? (
         <div className="w-full max-w-2xl bg-white shadow-lg rounded-lg p-4">
-          <h2 className="text-xl font-semibold mb-2">Stock Data</h2>
+          <h2 className="text-xl font-semibold mb-2">{ticker} Stock Data</h2>
           <div className="h-96">
-            <Line data={chartData} />
+            {chartData ? (
+              <Line data={chartData} options={options} />
+            ) : (
+              <p className="text-gray-500">No stock data available. Please enter a valid ticker.</p>
+            )}
           </div>
         </div>
       ) : (
