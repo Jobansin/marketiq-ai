@@ -59,7 +59,11 @@ def home():
 @app.get("/stock/{symbol}")
 def get_stock_price(symbol: str, db: Session = Depends(get_db)):
     """Fetch stock data with caching and API limit handling."""
-    
+
+    # Check if symbol is empty
+    if not symbol or symbol.strip() == "":
+        raise HTTPException(status_code=400, detail="Stock ticker cannot be empty.")
+
     # Check cache: return data if it's less than 10 minutes old
     if symbol in cache and time.time() - cache[symbol]["timestamp"] < 600:
         return cache[symbol]["data"]
@@ -78,21 +82,21 @@ def get_stock_price(symbol: str, db: Session = Depends(get_db)):
     if "Information" in data and "API key" in data["Information"]:
         raise HTTPException(status_code=429, detail="API limit exceeded. Please try again later.")
 
-    # Validate API response
-    if "Time Series (5min)" in data:
-        cache[symbol] = data
-        latest_time = list(data["Time Series (5min)"].keys())[0]
-        open_price = float(data["Time Series (5min)"][latest_time]["1. open"])
-        close_price = float(data["Time Series (5min)"][latest_time]["4. close"])
+    # Validate API response - Ensure data contains stock info
+    if "Time Series (5min)" not in data:
+        raise HTTPException(status_code=400, detail="Invalid stock ticker. Please enter a valid symbol.")
 
-        # Store in PostgreSQL
-        stock_entry = Stock(symbol=symbol, open_price=open_price, close_price=close_price)
-        db.add(stock_entry)
-        db.commit()
+    # Store in cache and database
+    cache[symbol] = data
+    latest_time = list(data["Time Series (5min)"].keys())[0]
+    open_price = float(data["Time Series (5min)"][latest_time]["1. open"])
+    close_price = float(data["Time Series (5min)"][latest_time]["4. close"])
 
-        # Save in cache
-        cache[symbol] = {"data": data, "timestamp": time.time()}
-        return data
+    # Store in PostgreSQL
+    stock_entry = Stock(symbol=symbol, open_price=open_price, close_price=close_price)
+    db.add(stock_entry)
+    db.commit()
 
-    raise HTTPException(status_code=400, detail="Invalid response from API. Please check the stock symbol.")
-
+    # Save in cache
+    cache[symbol] = {"data": data, "timestamp": time.time()}
+    return data
